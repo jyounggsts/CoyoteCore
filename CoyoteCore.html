@@ -8085,7 +8085,7 @@ mark.search-hit {
         <div class="setup-brand">CoyoteCore</div>
         <div class="setup-step-header">
             <h2 id="boot-setup-title">Configure session</h2>
-            <p id="boot-setup-desc">Connect your OneDrive portal with <strong>full editing access</strong>. Select the folder that contains <code>roster.html</code> and <code>store</code> — your synced <strong>Roster Manager</strong> folder. No web server required when opening from OneDrive.</p>
+            <p id="boot-setup-desc">Connect your OneDrive portal with <strong>full editing access</strong>. Select the folder that contains your portal HTML and <code>store</code> — your synced <strong>Roster Manager</strong> folder.</p>
             <p id="boot-setup-status" class="muted" style="font-size:12px;margin-top:8px;">Checking for data…</p>
             <p class="muted" style="font-size:12px;margin-top:6px;">Requires Chrome or Edge. OneDrive must finish syncing the <code>store</code> folder before granting access.</p>
         </div>
@@ -8231,6 +8231,20 @@ mark.search-hit {
                     <input type="text" id="setup-login-tagline" placeholder="e.g. IT Resources — Acme Corp" maxlength="80">
                 </label>
             </div>
+            <div class="setup-fields" id="setup-storage-choice" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--sw-border,rgba(255,255,255,.1));">
+                <div class="setup-step-header" style="margin-bottom:10px;">
+                    <h2 style="font-size:15px;margin:0 0 4px;">Data storage</h2>
+                    <p style="margin:0;font-size:12px;">Choose where roster, settings, and knowledge-base data are saved. You can change this later in Settings → Storage.</p>
+                </div>
+                <label class="field" style="flex-direction:row;align-items:flex-start;gap:10px;cursor:pointer;">
+                    <input type="radio" name="setup-storage-mode" value="browser" checked style="margin-top:3px;flex-shrink:0;">
+                    <span><strong>Browser storage</strong> <span class="muted" style="font-weight:400;">— fastest start on this device. Ideal when using CoyoteCore from GitHub Pages or trying the portal before linking OneDrive.</span></span>
+                </label>
+                <label class="field" style="flex-direction:row;align-items:flex-start;gap:10px;cursor:pointer;margin-top:8px;cursor:pointer;">
+                    <input type="radio" name="setup-storage-mode" value="onedrive" style="margin-top:3px;flex-shrink:0;">
+                    <span><strong>OneDrive folder</strong> <span class="muted" style="font-weight:400;">— sync data across PCs. Requires Chrome or Edge; pick the folder with your portal HTML and <code>store</code> subfolder.</span></span>
+                </label>
+            </div>
             <p class="setup-error" id="setup-error-4"></p>
             <div class="setup-nav">
                 <button type="button" class="btn btn-ghost" id="setup-back-4">← Back</button>
@@ -8246,7 +8260,7 @@ mark.search-hit {
         <div class="setup-brand">CoyoteCore</div>
         <div class="setup-step-header">
             <h2 id="storage-setup-title">Enable OneDrive editing</h2>
-            <p id="storage-setup-desc">Grant <strong>save access</strong> to your OneDrive data folder so edits sync across every device. Select the folder that contains <code>roster.html</code> and <code>store</code> — the same <strong>Roster Manager</strong> folder on each PC.</p>
+            <p id="storage-setup-desc">Grant <strong>save access</strong> to your OneDrive data folder so edits sync across every device. Select the folder that contains your portal HTML and <code>store</code> — the same <strong>Roster Manager</strong> folder on each PC.</p>
             <p class="muted" style="font-size:12px;margin-top:8px;">Requires Chrome or Edge. If you already linked this folder on this browser, click below to restore permission.</p>
         </div>
         <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px;">
@@ -10337,6 +10351,40 @@ function openedViaOneDriveHtml() {
     return location.protocol === "file:";
 }
 
+/** True when CoyoteCore is served over http(s) (e.g. GitHub Pages) — not file:// and not a shared server API host. */
+function isCoyoteCoreWebHosted() {
+    if (openedViaOneDriveHtml()) return false;
+    if (_portalServerActive) return false;
+    return location.protocol === "https:" || location.protocol === "http:";
+}
+
+function portalEntryHtmlName() {
+    const leaf = (location.pathname || "").split("/").filter(Boolean).pop() || "";
+    return /\.html?$/i.test(leaf) ? leaf : "CoyoteCore.html";
+}
+
+function dataFolderDescriptionHtml() {
+    return `<code>${portalEntryHtmlName()}</code> and <code>store</code>`;
+}
+
+function isWebHostedWelcomeMode() {
+    return isCoyoteCoreWebHosted() && !shouldShowSessionConfigureOnBoot() && !browserHasPortalData();
+}
+
+/** When true, block login until the user links OneDrive or picks a data path. */
+function shouldShowSessionConfigureOnBoot() {
+    if (hasValidOrgSession()) return false;
+    if (openedViaOneDriveHtml() && !hasWritableFileStorage()) return true;
+    if (_savedFileHandleNeedsPermission) return true;
+    if (isCoyoteCoreWebHosted()) {
+        if (Store.isColocated() && needsWritableOneDriveLink()) return true;
+        return false;
+    }
+    if (Store.isColocated() || _colocatedDataDetected) return true;
+    if (browserHasPortalData()) return false;
+    return true;
+}
+
 async function detectColocatedPortalManifest() {
     if (openedViaOneDriveHtml()) return null;
     const manifest = await _fetchColocatedJson("store/_manifest.json");
@@ -10610,7 +10658,7 @@ async function upgradeColocatedToWritable() {
     try {
         await dirHandle.getDirectoryHandle("store");
     } catch (_) {
-        toast("Select the folder that contains roster.html and the store folder.", "error");
+        toast("Select the folder that contains " + portalEntryHtmlName() + " and the store folder.", "error");
         return false;
     }
     try {
@@ -11198,7 +11246,7 @@ async function enableOneDriveStorage(options = {}) {
             toast("OneDrive sync requires Chrome or Edge.", "error");
             return false;
         }
-        toast("Select the folder that contains roster.html and the store folder.", "ok");
+        toast("Select the folder that contains " + portalEntryHtmlName() + " and the store folder.", "ok");
         return await Store.enableFileStorage({ preferFolderData });
     } catch (e) {
         console.error("[OneDrive] enableOneDriveStorage failed:", e);
@@ -14623,8 +14671,14 @@ function renderLoginFormState() {
 async function showLoginScreen() {
     await healOrgConfigFromColocatedIfNeeded();
     if (!hasValidOrgSession()) {
-        showSessionConfigureOverlay();
-        return;
+        if (shouldShowSessionConfigureOnBoot()) {
+            showSessionConfigureOverlay();
+            return;
+        }
+        if (!browserHasPortalData()) {
+            showSessionConfigureOverlay();
+            return;
+        }
     }
     hideBootSetupOverlay();
     const login = document.getElementById("login-screen");
@@ -35226,6 +35280,7 @@ function wireSetupWizard() {
         const bootstrapHash = await hashPassword(_setupState.bootstrapPassword || "");
         const themeBundle = _setupState.themeBundle || buildSetupThemeBundle();
 
+        const storageMode = document.querySelector('input[name="setup-storage-mode"]:checked')?.value || "browser";
         await ensurePortalStorageLinked();
         saveOrgConfig({
             version:               1,
@@ -35268,6 +35323,15 @@ function wireSetupWizard() {
             } catch (_) {}
         }
         endThemeEditorStore();
+        if (storageMode === "onedrive") {
+            const linked = await enableOneDriveStorage({ preferFolderData: false });
+            if (!linked) {
+                Store.set(STORAGE_PROMPT_KEY, true);
+                toast("OneDrive not linked yet — continuing with browser storage. Link anytime in Settings → Storage.", "warn");
+            }
+        } else {
+            Store.set(STORAGE_PROMPT_KEY, true);
+        }
         const adminUsername = provisionSetupAdminUser(_setupState.adminUsername || "admin", bootstrapHash);
         hideSetupWizard();
         hideBootSetupOverlay();
@@ -35666,7 +35730,11 @@ async function init() {
         return;
     }
     if (!hasValidOrgSession()) {
-        showSessionConfigureOverlay();
+        if (shouldShowSessionConfigureOnBoot() || !browserHasPortalData()) {
+            showSessionConfigureOverlay();
+            return;
+        }
+        await showLoginScreen();
         return;
     }
     setupWorkspacePickerLabels();
@@ -35680,25 +35748,47 @@ function refreshBootSetupOverlayCopy() {
     const desc  = document.getElementById("boot-setup-desc");
     const retry = document.getElementById("boot-setup-retry");
     const browserBtn = document.getElementById("boot-setup-browser");
+    const linkBtn = document.getElementById("boot-setup-link");
+    const newBtn = document.getElementById("boot-setup-new");
+    const htmlHint = dataFolderDescriptionHtml();
     if (openedViaOneDriveHtml()) {
         if (title) title.textContent = _savedFileHandleNeedsPermission ? "Restore OneDrive access" : "Link your OneDrive folder";
         if (desc) desc.innerHTML = _savedFileHandleNeedsPermission
-            ? "You opened <code>roster.html</code> from OneDrive. This browser needs permission again — click <strong>Grant save access</strong> and approve the same <strong>Roster Manager</strong> folder."
-            : "You opened <code>roster.html</code> directly from OneDrive — <strong>no web server needed</strong>. Click <strong>Grant save access</strong> once and select this folder (the one containing <code>roster.html</code> and <code>store</code>).";
-        if (retry) retry.textContent = "Restore saved folder link…";
+            ? `You opened <code>${portalEntryHtmlName()}</code> from OneDrive. This browser needs permission again — click <strong>Grant save access</strong> and approve the same <strong>Roster Manager</strong> folder.`
+            : `You opened <code>${portalEntryHtmlName()}</code> directly from OneDrive — <strong>no web server needed</strong>. Click <strong>Grant save access</strong> once and select this folder (the one containing ${htmlHint}).`;
+        if (retry) { retry.textContent = "Restore saved folder link…"; retry.style.display = ""; }
         if (browserBtn) browserBtn.style.display = "none";
+        if (linkBtn) linkBtn.className = "btn btn-primary";
+        if (newBtn) newBtn.className = "btn btn-ghost";
         return;
     }
+    if (isWebHostedWelcomeMode()) {
+        if (title) title.textContent = "Welcome to CoyoteCore";
+        if (desc) desc.innerHTML = `You're using the hosted portal. <strong>Set up a new organization</strong> to get started, or link an existing <strong>OneDrive</strong> folder that contains ${htmlHint}.`;
+        if (retry) retry.style.display = "none";
+        if (browserBtn) browserBtn.style.display = "none";
+        if (linkBtn) { linkBtn.className = "btn btn-ghost"; linkBtn.textContent = "Link existing OneDrive data…"; }
+        if (newBtn) { newBtn.className = "btn btn-primary"; newBtn.textContent = "Set up a new organization"; }
+        return;
+    }
+    if (linkBtn) linkBtn.textContent = "Grant save access to OneDrive folder…";
+    if (newBtn) newBtn.textContent = "Set up a new organization";
     if (title) title.textContent = "Configure session";
-    if (desc) desc.innerHTML = "Connect your OneDrive portal with <strong>full editing access</strong>. Select the folder that contains <code>roster.html</code> and <code>store</code> — your synced <strong>Roster Manager</strong> folder.";
-    if (retry) retry.textContent = "Auto-detect & enable editing…";
+    if (desc) desc.innerHTML = `Connect your OneDrive portal with <strong>full editing access</strong>. Select the folder that contains ${htmlHint} — your synced <strong>Roster Manager</strong> folder.`;
+    if (retry) { retry.textContent = "Auto-detect & enable editing…"; retry.style.display = ""; }
     if (browserBtn) browserBtn.style.display = browserHasLegacyRosterData() ? "" : "none";
+    if (linkBtn) linkBtn.className = "btn btn-primary";
+    if (newBtn) newBtn.className = "btn btn-ghost";
 }
 
 async function updateSessionConfigureStatus() {
     const el = document.getElementById("boot-setup-status");
     refreshBootSetupOverlayCopy();
     if (!el) return;
+    if (isWebHostedWelcomeMode()) {
+        el.textContent = "New here? Set up your organization. Already use CoyoteCore on OneDrive? Link your folder below.";
+        return;
+    }
     if (openedViaOneDriveHtml()) {
         if (hasWritableFileStorage()) {
             el.textContent = "OneDrive folder linked — loading…";
@@ -35845,7 +35935,7 @@ function wireBootSetupOverlay() {
             try {
                 const ok = await enableOneDriveStorage({ preferFolderData: true });
                 if (!ok) {
-                    if (err) err.textContent = "Folder not linked. Select the folder that contains roster.html and the store folder.";
+                    if (err) err.textContent = "Folder not linked. Select the folder that contains " + portalEntryHtmlName() + " and the store folder.";
                     void updateSessionConfigureStatus();
                     return;
                 }
@@ -35890,11 +35980,21 @@ function refreshStorageSetupOverlayCopy() {
     const title = document.getElementById("storage-setup-title");
     const desc = document.getElementById("storage-setup-desc");
     const skip = document.getElementById("storage-setup-skip");
+    const htmlHint = dataFolderDescriptionHtml();
     if (!title || !desc) return;
     if (openedViaOneDriveHtml()) {
         title.textContent = _savedFileHandleNeedsPermission ? "Restore OneDrive access" : "Link OneDrive folder";
-        desc.innerHTML = "Opening from OneDrive requires a <strong>one-time folder link</strong> (no web server). Select the <strong>Roster Manager</strong> folder that contains <code>roster.html</code> and <code>store</code>.";
+        desc.innerHTML = `Opening from OneDrive requires a <strong>one-time folder link</strong> (no web server). Select the <strong>Roster Manager</strong> folder that contains ${htmlHint}.`;
         if (skip) skip.style.display = "none";
+        return;
+    }
+    if (isCoyoteCoreWebHosted() && !Store.isColocated() && !_colocatedDataDetected) {
+        title.textContent = "Choose data storage";
+        desc.innerHTML = `Link <strong>OneDrive</strong> to sync roster data across devices, or keep using <strong>browser storage</strong> on this PC while running CoyoteCore from the web. OneDrive folders contain ${htmlHint}.`;
+        if (skip) {
+            skip.style.display = "";
+            skip.textContent = "Use browser storage on this device";
+        }
         return;
     }
     if (_savedFileHandleNeedsPermission) {
@@ -35905,9 +36005,12 @@ function refreshStorageSetupOverlayCopy() {
         desc.innerHTML = "Portal data was found on OneDrive. Grant <strong>save access</strong> on this device so roster changes sync everywhere.";
     } else {
         title.textContent = "Enable OneDrive editing";
-        desc.innerHTML = "Grant <strong>save access</strong> to your OneDrive data folder so edits sync across every device. Select the folder that contains <code>roster.html</code> and <code>store</code>.";
+        desc.innerHTML = `Grant <strong>save access</strong> to your OneDrive data folder so edits sync across every device. Select the folder that contains ${htmlHint}.`;
     }
-    if (skip) skip.style.display = (Store.isColocated() || _colocatedDataDetected) ? "none" : "";
+    if (skip) {
+        skip.style.display = (Store.isColocated() || _colocatedDataDetected) ? "none" : "";
+        skip.textContent = "Keep browser storage for now";
+    }
 }
 
 async function maybePromptStorageSetup() {
