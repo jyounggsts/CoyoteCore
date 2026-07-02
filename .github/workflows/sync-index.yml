@@ -1,0 +1,21 @@
+name: Sync index.html
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - CoyoteCore.html
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp CoyoteCore.html index.html
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: Sync index.html from CoyoteCore.html
+          file_pattern: index.html
