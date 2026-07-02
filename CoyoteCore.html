@@ -7670,8 +7670,24 @@ html.setup-active body {
     padding: 12px; border: 1px dashed var(--sw-border); border-radius: 6px;
     background: var(--sw-surface);
 }
-.setup-logo-upload img { background: #1a1a1a !important; }
+.setup-logo-preview {
+    width: 56px; height: 56px; border-radius: 10px;
+    background: rgba(255,255,255,.04);
+    border: 1px dashed var(--sw-border);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; overflow: hidden;
+}
+.setup-logo-preview img {
+    width: 100%; height: 100%; object-fit: contain; padding: 6px;
+    background: transparent !important;
+}
+.setup-logo-preview img[hidden] { display: none !important; }
+.setup-logo-empty {
+    font-size: 10px; color: var(--sw-muted); text-align: center;
+    line-height: 1.2; padding: 4px;
+}
 .setup-logo-upload-actions { display: flex; flex-direction: column; gap: 6px; }
+.brand-logo[hidden] { display: none !important; }
 .setup-nav {
     display: flex; justify-content: space-between; align-items: center;
     margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--sw-border);
@@ -8139,7 +8155,10 @@ mark.search-hit {
                 <div class="field">
                     <span>Logo <span class="muted" style="font-weight:400;">(optional)</span></span>
                     <div class="setup-logo-upload">
-                        <img id="setup-logo-preview" src="logo.png" onerror="this.onerror=null;this.src=LOGO_EMBEDDED" alt="Logo preview" style="width:56px;height:56px;border-radius:10px;object-fit:contain;background:rgba(255,255,255,.06);padding:6px;flex-shrink:0;">
+                        <div class="setup-logo-preview" id="setup-logo-preview-wrap">
+                            <img id="setup-logo-preview" hidden alt="Logo preview">
+                            <span class="setup-logo-empty" id="setup-logo-empty">None</span>
+                        </div>
                         <div class="setup-logo-upload-actions">
                             <button type="button" class="btn btn-ghost btn-sm" id="btn-pick-logo">Upload logo</button>
                             <button type="button" class="btn btn-ghost btn-sm" id="btn-clear-logo" style="display:none;">Remove</button>
@@ -11521,13 +11540,54 @@ function getRecoveryKeyHint() {
 function getLogoSrc() {
     const cfg = loadOrgConfig();
     const stored = cfg && cfg.orgLogoBase64;
-    // Only use the stored value if it is a proper data URI or absolute URL.
-    // Relative filenames (e.g. "logo.png") are stale config artifacts and must
-    // fall back to the embedded logo so the app works regardless of file location.
     if (stored && (stored.startsWith("data:") || stored.startsWith("http"))) {
         return stored;
     }
-    return LOGO_EMBEDDED;
+    // Legacy installs may have stored a relative filename before base64 upload was enforced.
+    if (stored && typeof stored === "string") return LOGO_EMBEDDED;
+    return null;
+}
+
+function resetSetupLogoPreview() {
+    const img = document.getElementById("setup-logo-preview");
+    const empty = document.getElementById("setup-logo-empty");
+    const clr = document.getElementById("btn-clear-logo");
+    const fi = document.getElementById("setup-logo-file");
+    if (img) { img.hidden = true; img.removeAttribute("src"); }
+    if (empty) empty.hidden = false;
+    if (clr) clr.style.display = "none";
+    if (fi) fi.value = "";
+}
+
+function showSetupLogoPreview(dataUrl) {
+    const img = document.getElementById("setup-logo-preview");
+    const empty = document.getElementById("setup-logo-empty");
+    const clr = document.getElementById("btn-clear-logo");
+    if (img) { img.src = dataUrl; img.hidden = false; }
+    if (empty) empty.hidden = true;
+    if (clr) clr.style.display = "inline-flex";
+}
+
+function setOrgLogoPreviewState(imgEl, emptyEl, src) {
+    const hasLogo = !!(src && (src.startsWith("data:") || src.startsWith("http")));
+    if (imgEl) {
+        if (hasLogo) {
+            imgEl.src = src;
+            imgEl.hidden = false;
+        } else {
+            imgEl.hidden = true;
+            imgEl.removeAttribute("src");
+        }
+    }
+    if (emptyEl) emptyEl.hidden = hasLogo;
+}
+
+function kbcLogoIconHtml(style, innerClass) {
+    const logo = getLogoSrc();
+    if (logo) {
+        return `<img src="${escapeHTML(logo)}" alt="" class="${innerClass || ""}" style="${style}">`;
+    }
+    return `<span class="kbc-logo-fallback ${innerClass || ""}" style="${style}" aria-hidden="true">💬</span>`;
 }
 
 function getMdmPrefix() {
@@ -11567,22 +11627,40 @@ function applyOrgBranding() {
 
     const setImg = (id, src, alt) => {
         const el = document.getElementById(id);
-        if (el) { el.src = src; el.alt = alt; }
+        if (!el) return;
+        if (src) {
+            el.src = src;
+            el.alt = alt;
+            el.hidden = false;
+        } else {
+            el.removeAttribute("src");
+            el.alt = "";
+            el.hidden = true;
+        }
     };
     setImg("login-logo", logo, displayName + " logo");
     setImg("app-logo",   logo, displayName + " logo");
 
-    const fabImg = document.querySelector("#kbc-fab img");
-    if (fabImg) { fabImg.src = logo; fabImg.alt = displayName; }
+    const fab = document.getElementById("kbc-fab");
+    if (fab) {
+        fab.innerHTML = logo
+            ? `<img src="${escapeHTML(logo)}" alt="${escapeHTML(displayName)}" class="kbc-fab-logo">`
+            : `<span class="kbc-fab-mark" aria-hidden="true">💬</span>`;
+    }
     const kbcAvatarImg = document.querySelector(".kbc-header-avatar img");
-    if (kbcAvatarImg) kbcAvatarImg.src = logo;
+    if (kbcAvatarImg) {
+        if (logo) { kbcAvatarImg.src = logo; kbcAvatarImg.hidden = false; }
+        else { kbcAvatarImg.removeAttribute("src"); kbcAvatarImg.hidden = true; }
+    }
     const kbcTitleEl = document.querySelector(".kbc-header-title");
     if (kbcTitleEl) kbcTitleEl.textContent = displayName;
 
-    ["link[rel='icon']", "link[rel='shortcut icon']", "link[rel='apple-touch-icon']"].forEach(sel => {
-        const el = document.querySelector(sel);
-        if (el) el.href = logo;
-    });
+    if (logo) {
+        ["link[rel='icon']", "link[rel='shortcut icon']", "link[rel='apple-touch-icon']"].forEach(sel => {
+            const el = document.querySelector(sel);
+            if (el) el.href = logo;
+        });
+    }
 }
 
 // ── Organization-wide portal theme ───────────────────────────────────────────
@@ -35144,6 +35222,9 @@ function showSetupWizard() {
     if (loginEl) loginEl.style.display = "none";
     if (appEl)   appEl.setAttribute("hidden", "hidden");
     _setupState = {};
+    resetSetupLogoPreview();
+    const orgInput = document.getElementById("setup-org-name");
+    if (orgInput) orgInput.value = "";
     _setupShowStep(1);
 }
 
@@ -35191,22 +35272,14 @@ function wireSetupWizard() {
         reader.onload = ev => {
             _setupState.orgLogoBase64   = ev.target.result;
             _setupState.orgLogoFilename = file.name;
-            const prev = document.getElementById("setup-logo-preview");
-            if (prev) prev.src = ev.target.result;
-            const clr = document.getElementById("btn-clear-logo");
-            if (clr) clr.style.display = "inline-flex";
+            showSetupLogoPreview(ev.target.result);
         };
         reader.readAsDataURL(file);
     });
     document.getElementById("btn-clear-logo")?.addEventListener("click", () => {
         _setupState.orgLogoBase64   = null;
         _setupState.orgLogoFilename = "";
-        const prev = document.getElementById("setup-logo-preview");
-        if (prev) prev.src = LOGO_EMBEDDED;
-        const clr = document.getElementById("btn-clear-logo");
-        if (clr) clr.style.display = "none";
-        const fi = document.getElementById("setup-logo-file");
-        if (fi) fi.value = "";
+        resetSetupLogoPreview();
     });
 
     // Step 1 → 2
@@ -35382,7 +35455,7 @@ function buildCustomRolesRowsHtml(prefix, cfg) {
 
 function buildOrgManagementHTML(prefix, cfg) {
     const dept    = (cfg.departments && cfg.departments[0]) || { id: "it", label: "IT", subtitle: "IT Resources Panel" };
-    const logoSrc = cfg.orgLogoBase64 || "logo.png";
+    const logoSrc = cfg.orgLogoBase64 || "";
     const ti = (field, val, ph, extra) => orgMgmtTextInput(prefix, field, val, ph, extra);
 
     return `
@@ -35402,8 +35475,10 @@ function buildOrgManagementHTML(prefix, cfg) {
             <div class="ap-row" style="align-items:flex-start;">
                 <span class="ap-label">Logo</span>
                 <span class="ap-control" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-                    <img id="${prefix}-logo-preview" src="${escapeHTML(logoSrc)}" alt="Logo"
-                        style="width:48px;height:48px;border-radius:8px;object-fit:contain;background:rgba(255,255,255,.06);padding:4px;flex-shrink:0;">
+                    <div class="setup-logo-preview" style="width:48px;height:48px;border-radius:8px;">
+                        <img id="${prefix}-logo-preview" ${logoSrc ? `src="${escapeHTML(logoSrc)}"` : ""} alt="Logo" ${logoSrc ? "" : "hidden"}>
+                        <span class="setup-logo-empty" id="${prefix}-logo-empty" ${logoSrc ? "hidden" : ""}>None</span>
+                    </div>
                     <div style="display:flex;flex-direction:column;gap:5px;">
                         <button type="button" class="btn btn-ghost btn-sm" id="${prefix}-pick-logo">Change logo</button>
                         <button type="button" class="btn btn-ghost btn-sm" id="${prefix}-clear-logo" ${!cfg.orgLogoBase64 ? "disabled" : ""}>Remove custom logo</button>
@@ -35563,13 +35638,21 @@ function wireOrgManagementHandlers(pane, prefix, onSaved) {
         if (file.size > 2 * 1024 * 1024) { toast("Logo must be under 2 MB.", "error"); return; }
         const reader = new FileReader();
         reader.onload = ev => {
-            pane.querySelector("#" + prefix + "-logo-preview").src = ev.target.result;
+            setOrgLogoPreviewState(
+                pane.querySelector("#" + prefix + "-logo-preview"),
+                pane.querySelector("#" + prefix + "-logo-empty"),
+                ev.target.result
+            );
             pane.querySelector("#" + prefix + "-clear-logo").disabled = false;
         };
         reader.readAsDataURL(file);
     });
     pane.querySelector("#" + prefix + "-clear-logo")?.addEventListener("click", () => {
-        pane.querySelector("#" + prefix + "-logo-preview").src = LOGO_EMBEDDED;
+        setOrgLogoPreviewState(
+            pane.querySelector("#" + prefix + "-logo-preview"),
+            pane.querySelector("#" + prefix + "-logo-empty"),
+            null
+        );
         pane.querySelector("#" + prefix + "-clear-logo").disabled = true;
         pane.querySelector("#" + prefix + "-logo-file").value = "";
     });
@@ -35621,7 +35704,7 @@ function wireOrgManagementHandlers(pane, prefix, onSaved) {
         if (logoFile && logoFile.files[0]) {
             newLogoBase64   = logoImg.src;
             newLogoFilename = logoFile.files[0].name;
-        } else if (!logoImg.src || logoImg.src.endsWith("logo.png") || logoImg.src === LOGO_EMBEDDED) {
+        } else if (logoImg.hidden || !logoImg.src) {
             newLogoBase64   = null;
             newLogoFilename = "";
         }
@@ -44156,7 +44239,7 @@ function kbcRenderSessions() {
             ${sessions.length ? `<div class="kbc-sessions-divider">Recent</div>` : ""}
             ${sessions.length ? sessions.map(s => `
                 <div class="kbc-session-item" data-sid="${escapeHTML(s.id)}">
-                    <div class="kbc-session-icon"><img src="${getLogoSrc()}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:6px;display:block;"></div>
+                    <div class="kbc-session-icon">${kbcLogoIconHtml("width:100%;height:100%;object-fit:cover;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px;", "")}</div>
                     <div class="kbc-session-info">
                         <div class="kbc-session-title">${escapeHTML(s.title)}</div>
                         <div class="kbc-session-meta">${escapeHTML(kbcRelativeTime(s.updatedAt))} · ${s.messages.length} message${s.messages.length !== 1 ? "s" : ""}</div>
@@ -44199,7 +44282,7 @@ function kbcRenderSetup(afterSave) {
 
     body.innerHTML = `
         <div class="kbc-setup">
-            <div class="kbc-setup-icon"><img src="${escapeHTML(getLogoSrc())}" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:10px;display:block;"></div>
+            <div class="kbc-setup-icon">${kbcLogoIconHtml("width:48px;height:48px;object-fit:cover;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;", "")}</div>
             <h3>AI upgrade (optional)</h3>
             <p>The built-in <strong>${escapeHTML(getOrgName())} assistant</strong> runs fully offline — roster lookups, licenses, inventory, abbreviations, and KB answers are all built in.<br>Connect <strong>Ollama</strong> (optional) only if you want open-ended AI on top.</p>
 
@@ -44392,7 +44475,7 @@ function kbcAppendBotMsg(text, sources, dataBadge) {
     const srcHTML = (sources||[]).map(s => `<span class="kbc-source-tag" title="${escapeHTML(s)}">📄 ${escapeHTML(s)}</span>`).join("");
     msgs.insertAdjacentHTML("beforeend", `
         <div class="kbc-msg bot">
-            <div class="kbc-avatar bot"><img src="${getLogoSrc()}" alt=""></div>
+            <div class="kbc-avatar bot">${kbcLogoIconHtml("width:100%;height:100%;object-fit:cover;display:block;", "")}</div>
             <div class="kbc-bubble">${badgeHTML}${kbcMarkdown(text)}${srcHTML ? `<div class="kbc-source-strip">${srcHTML}</div>` : ""}</div>
         </div>`);
     requestAnimationFrame(() => { msgs.scrollTop = msgs.scrollHeight; });
@@ -44403,7 +44486,7 @@ function kbcShowTyping() {
     if (!msgs) return;
     msgs.insertAdjacentHTML("beforeend", `
         <div class="kbc-msg bot" id="kbc-typing-indicator">
-            <div class="kbc-avatar bot"><img src="${getLogoSrc()}" alt=""></div>
+            <div class="kbc-avatar bot">${kbcLogoIconHtml("width:100%;height:100%;object-fit:cover;display:block;", "")}</div>
             <div class="kbc-bubble"><div class="kbc-typing"><span></span><span></span><span></span></div></div>
         </div>`);
     requestAnimationFrame(() => { msgs.scrollTop = msgs.scrollHeight; });
@@ -44841,7 +44924,11 @@ function kbcOpen() {
     _kbcOpen = true;
     document.getElementById("kbc-panel").hidden = false;
     document.getElementById("kbc-fab").classList.add("open");
-    document.getElementById("kbc-fab").innerHTML = `<img src="${getLogoSrc()}" alt="${escapeHTML(getOrgName())}" class="kbc-fab-logo">`;
+    const logo = getLogoSrc();
+    const name = getOrgName();
+    document.getElementById("kbc-fab").innerHTML = logo
+        ? `<img src="${escapeHTML(logo)}" alt="${escapeHTML(name)}" class="kbc-fab-logo">`
+        : `<span class="kbc-fab-mark" aria-hidden="true">💬</span>`;
     // Ollama is optional — the bot works offline with built-in lookups.
     kbcRenderSessions();
 }
@@ -44850,7 +44937,11 @@ function kbcClose() {
     _kbcOpen = false;
     document.getElementById("kbc-panel").hidden = true;
     document.getElementById("kbc-fab").classList.remove("open");
-    document.getElementById("kbc-fab").innerHTML = `<img src="${getLogoSrc()}" alt="${escapeHTML(getOrgName())}" class="kbc-fab-logo">`;
+    const logo = getLogoSrc();
+    const name = getOrgName();
+    document.getElementById("kbc-fab").innerHTML = logo
+        ? `<img src="${escapeHTML(logo)}" alt="${escapeHTML(name)}" class="kbc-fab-logo">`
+        : `<span class="kbc-fab-mark" aria-hidden="true">💬</span>`;
 }
 
 // ── init ─────────────────────────────────────────────────────────
