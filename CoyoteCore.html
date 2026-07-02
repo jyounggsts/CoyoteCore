@@ -8300,6 +8300,7 @@ mark.search-hit {
         </div>
         <div style="text-align:center; margin-top:14px; display:flex; flex-direction:column; gap:6px; align-items:center;">
             <button type="button" class="btn btn-ghost btn-sm" id="btn-configure-session" style="font-size:12px;">Configure session / Link OneDrive data</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-download-coyotecore-html-login" style="font-size:11px; opacity:0.65;">Download HTML</button>
             <button type="button" class="btn btn-ghost btn-sm" id="btn-login-recovery" style="font-size:11px; opacity:0.65;">Can't sign in? Reset admin password</button>
         </div>
         <div id="login-recovery-panel" style="display:none; margin-top:14px; padding:14px 16px; background:var(--card-bg,#1e293b); border:1px solid var(--border,#334155); border-radius:8px; text-align:left;">
@@ -11304,6 +11305,8 @@ const LEGACY_DATA_KEY     = "rosterManager.v1";
 // ── CoyoteCore platform + Org Config ───────────────────────────────────────
 // CoyoteCore is the product; each org customizes portal name, logo, roles, etc.
 const PLATFORM_NAME = "CoyoteCore";
+const COYOTECORE_GITHUB_REPO = "https://github.com/jyounggsts/CoyoteCore";
+const COYOTECORE_GITHUB_RAW_URL = "https://raw.githubusercontent.com/jyounggsts/CoyoteCore/main/CoyoteCore.html";
 const DEFAULT_PORTAL_SUFFIX = "Employee Portal";
 const ORG_CONFIG_KEY = "rosterManager.v1.orgConfig";
 
@@ -15323,7 +15326,14 @@ function renderSettingsPane() {
                     <div class="settings-action-card-desc" style="font-size:12px;">Customize portal branding, roles, and workspace for ${escapeHTML(getOrgName())}.</div>
                 </div>
                 <button class="btn btn-primary btn-sm" id="settings-open-org-mgmt">Open</button>
-            </div>` : ""}`;
+            </div>` : ""}
+            <div class="settings-action-card" style="margin-top:10px;" id="coyotecore-download-card">
+                <div class="settings-action-card-body" style="width:100%;">
+                    <div class="settings-action-card-title">Download ${escapeHTML(PLATFORM_NAME)}</div>
+                    <div class="settings-action-card-desc" style="font-size:12px;">Get the latest single-file HTML from <a href="${COYOTECORE_GITHUB_REPO}" target="_blank" rel="noopener noreferrer">GitHub</a> to run offline or on another PC.</div>
+                </div>
+                <button class="btn btn-ghost btn-sm" id="btn-download-coyotecore-html">Download HTML</button>
+            </div>`;
 
         if (navigator.storage && navigator.storage.estimate) {
             navigator.storage.estimate().then(est => {
@@ -15354,6 +15364,9 @@ function renderSettingsPane() {
             state.view = "requests";
             state.adminTab = "org";
             renderAll();
+        });
+        pane.querySelector("#btn-download-coyotecore-html")?.addEventListener("click", () => {
+            void downloadCoyoteCoreFromGitHub();
         });
         wireNicknameField();
 
@@ -29715,6 +29728,21 @@ function downloadFile(filename, content, mimeType) {
     setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
 }
 
+async function downloadCoyoteCoreFromGitHub() {
+    try {
+        toast("Downloading CoyoteCore.html…", "info");
+        const res = await fetch(COYOTECORE_GITHUB_RAW_URL, { cache: "no-store" });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const html = await res.text();
+        if (!html || !/<html/i.test(html)) throw new Error("Unexpected file contents");
+        downloadFile("CoyoteCore.html", html, "text/html;charset=utf-8");
+        toast("CoyoteCore.html downloaded from GitHub.", "success");
+    } catch (e) {
+        toast("Download failed — opening GitHub in a new tab.", "warn");
+        window.open(COYOTECORE_GITHUB_REPO + "/raw/main/CoyoteCore.html", "_blank", "noopener,noreferrer");
+    }
+}
+
 function exportCSV(empList) {
     // Optional subset (bulk actions); guard because this is also used as a
     // plain click handler where the first arg is an Event.
@@ -33218,6 +33246,10 @@ function wireLoginHandlers() {
 
     document.getElementById("btn-configure-session")?.addEventListener("click", () => {
         showSessionConfigureOverlay();
+    });
+
+    document.getElementById("btn-download-coyotecore-html-login")?.addEventListener("click", () => {
+        void downloadCoyoteCoreFromGitHub();
     });
 
     document.getElementById("btn-login-recovery").addEventListener("click", () => {
