@@ -8300,7 +8300,6 @@ mark.search-hit {
         </div>
         <div style="text-align:center; margin-top:14px; display:flex; flex-direction:column; gap:6px; align-items:center;">
             <button type="button" class="btn btn-ghost btn-sm" id="btn-configure-session" style="font-size:12px;">Configure session / Link OneDrive data</button>
-            <button type="button" class="btn btn-ghost btn-sm" id="btn-download-coyotecore-html-login" style="font-size:11px; opacity:0.65;">Download HTML</button>
             <button type="button" class="btn btn-ghost btn-sm" id="btn-login-recovery" style="font-size:11px; opacity:0.65;">Can't sign in? Reset admin password</button>
         </div>
         <div id="login-recovery-panel" style="display:none; margin-top:14px; padding:14px 16px; background:var(--card-bg,#1e293b); border:1px solid var(--border,#334155); border-radius:8px; text-align:left;">
@@ -33246,10 +33245,6 @@ function wireLoginHandlers() {
 
     document.getElementById("btn-configure-session")?.addEventListener("click", () => {
         showSessionConfigureOverlay();
-    });
-
-    document.getElementById("btn-download-coyotecore-html-login")?.addEventListener("click", () => {
-        void downloadCoyoteCoreFromGitHub();
     });
 
     document.getElementById("btn-login-recovery").addEventListener("click", () => {
